@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vicel-analytics-v1';
+const CACHE_NAME = 'vicel-analytics-v2';
 const urlsToCache = [
   './',
   './index.html',
