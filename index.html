@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VICEL Analytics</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#201e1f" />
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon.png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="VICEL Analytics" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <style>
+    :root {
+      --crema: #fff7e0;
+      --oscuro: #201e1f;
+      --naranja: #e2781f;
+      --naranja-hover: #b3410e;
+      --gris: #2a2a2a;
+      --borde: #3a3a3a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body { font-family: 'Poppins', sans-serif; background: var(--oscuro); color: #fff; }
+    #app { display: flex; min-height: 100vh; }
+
+    .sidebar {
+      width: 240px; background: var(--crema); color: var(--oscuro);
+      padding: 24px 18px; display: flex; flex-direction: column;
+      position: fixed; top: 0; left: 0; bottom: 0; z-index: 100;
+      transition: transform 0.3s ease; overflow-y: auto;
+    }
+    .sidebar .logo { display: flex; justify-content: center; margin-bottom: 24px; }
+    .sidebar .logo img { max-width: 140px; height: auto; }
+    .sidebar .nav { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+    .sidebar .nav-item {
+      display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+      border-radius: 30px; font-weight: 600; font-size: 15px;
+      color: var(--oscuro); background: transparent; border: none;
+      cursor: pointer; text-align: left; transition: 0.2s; width: 100%;
+      font-family: inherit;
+    }
+    .sidebar .nav-item i { font-size: 18px; width: 22px; text-align: center; }
+    .sidebar .nav-item:hover { background: rgba(0,0,0,0.06); }
+    .sidebar .nav-item.active { background: var(--oscuro); color: var(--naranja); }
+    .sidebar .site-info {
+      margin-top: 16px; padding: 12px 16px; border-top: 1px solid rgba(0,0,0,0.08);
+      font-size: 12px; color: #6c6b5e; text-align: center;
+    }
+    .sidebar .site-info strong { color: var(--naranja); font-weight: 700; }
+
+    .main { flex: 1; margin-left: 240px; padding: 28px 36px; min-height: 100vh; }
+    .menu-toggle {
+      display: none; position: fixed; top: 14px; left: 14px; z-index: 200;
+      background: var(--naranja); color: #fff; border: none; border-radius: 30px;
+      padding: 8px 14px; font-size: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      cursor: pointer;
+    }
+    .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 99; }
+    .overlay.active { display: block; }
+
+    @media (max-width: 900px) {
+      .sidebar { transform: translateX(-100%); width: 260px; }
+      .sidebar.open { transform: translateX(0); }
+      .main { margin-left: 0; padding: 70px 18px 24px; }
+      .menu-toggle { display: flex; }
+    }
+
+    .page-title {
+      font-size: 26px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 2px; margin-bottom: 4px;
+    }
+    .page-sub { color: rgba(255,255,255,0.55); margin-bottom: 22px; font-size: 13px; }
+
+    .kpi-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 16px; margin-bottom: 22px;
+    }
+    @media (max-width: 900px) { .kpi-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 400px) { .kpi-grid { grid-template-columns: 1fr 1fr; gap: 10px; } }
+
+    .kpi { background: var(--crema); color: var(--oscuro); border-radius: 28px; padding: 18px 20px; }
+    .kpi .label {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      color: var(--naranja); letter-spacing: 1px; margin-bottom: 6px;
+    }
+    .kpi .value { font-size: 32px; font-weight: 800; line-height: 1.1; word-break: break-word; }
+    .kpi .sub { font-size: 11px; color: #6c6b5e; margin-top: 4px; font-weight: 500; }
+    @media (max-width: 500px) { .kpi .value { font-size: 24px; } .kpi { padding: 14px 16px; } }
+
+    .card-dark { background: var(--gris); border-radius: 28px; padding: 20px 22px; margin-bottom: 20px; }
+    .card-dark h3 {
+      font-size: 14px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 1.5px; margin-bottom: 14px; color: rgba(255,255,255,0.8);
+    }
+
+    .chart-wrap { height: 280px; position: relative; }
+    @media (max-width: 500px) { .chart-wrap { height: 220px; } }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 800px) { .grid-2 { grid-template-columns: 1fr; } }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; animation: fadeIn 0.25s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    .filter-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
+    .filter-bar select, .filter-bar input {
+      background: var(--gris); color: #fff; border: 1px solid var(--borde);
+      border-radius: 30px; padding: 9px 18px; font-family: inherit;
+      font-size: 14px; outline: none;
+    }
+    .filter-bar select:focus, .filter-bar input:focus { border-color: var(--naranja); }
+    .btn-orange {
+      background: var(--naranja); color: #fff; border: none; border-radius: 30px;
+      padding: 9px 20px; font-weight: 600; font-family: inherit; font-size: 14px;
+      cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+      transition: 0.2s;
+    }
+    .btn-orange:hover { background: var(--naranja-hover); }
+
+    .row-list { display: flex; flex-direction: column; gap: 8px; }
+    .row-item {
+      background: var(--crema); color: var(--oscuro); border-radius: 20px;
+      padding: 12px 18px; display: flex; justify-content: space-between;
+      align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    .row-item .left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
+    .row-item .badge {
+      background: var(--oscuro); color: var(--crema); border-radius: 30px;
+      padding: 3px 12px; font-size: 11px; font-weight: 700;
+      text-transform: uppercase; white-space: nowrap; flex-shrink: 0;
+    }
+    .row-item .name {
+      font-weight: 600; font-size: 14px;
+      overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; min-width: 0; max-width: 100%;
+    }
+    .row-item .num { font-weight: 700; font-size: 16px; white-space: nowrap; }
+    .row-item .meta { font-size: 11px; color: #6c6b5e; font-weight: 500; }
+
+    .visit-card {
+      background: var(--crema); color: var(--oscuro); border-radius: 20px;
+      padding: 12px 18px; display: flex; flex-direction: column; gap: 6px;
+    }
+    .visit-card .visit-top {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 12px; flex-wrap: wrap;
+    }
+    .visit-card .path { font-weight: 700; font-size: 14px; word-break: break-all; }
+    .visit-card .time { font-size: 11px; color: #6c6b5e; white-space: nowrap; }
+    .visit-card .visit-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+    .visit-card .tag {
+      background: rgba(0,0,0,0.08); color: var(--oscuro);
+      border-radius: 30px; padding: 2px 10px; font-size: 11px; font-weight: 600;
+    }
+    .visit-card .title-small { font-size: 12px; color: #6c6b5e; }
+
+    .loading {
+      position: fixed; inset: 0; background: var(--oscuro);
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 16px; z-index: 999;
+      transition: opacity 0.3s ease;
+    }
+    .loading.hidden { opacity: 0; pointer-events: none; }
+    .spinner {
+      width: 42px; height: 42px; border-radius: 50%;
+      border: 4px solid rgba(226,120,31,0.2);
+      border-top-color: var(--naranja);
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty { text-align: center; padding: 40px 20px; color: rgba(255,255,255,0.5); font-size: 14px; }
+
+    .code-block {
+      background: #0d0d0d; color: #e2e2e2; border-radius: 16px;
+      padding: 14px 18px; font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 12px; overflow-x: auto; white-space: pre;
+      line-height: 1.5; margin: 10px 0;
+    }
+    .info-box {
+      background: rgba(226,120,31,0.1);
+      border-left: 3px solid var(--naranja);
+      border-radius: 12px; padding: 14px 18px;
+      margin: 12px 0; font-size: 13px; color: rgba(255,255,255,0.85);
+      line-height: 1.6;
+    }
+    .info-box strong { color: var(--naranja); }
+    .btn-copy {
+      background: var(--naranja); color: #fff; border: none;
+      border-radius: 20px; padding: 6px 14px; font-weight: 600;
+      font-family: inherit; font-size: 12px; cursor: pointer;
+      margin-top: 6px;
+    }
+    .btn-copy:hover { background: var(--naranja-hover); }
+  </style>
+</head>
+<body>
+
+  <div class="loading" id="loadingScreen">
+    <div class="spinner"></div>
+    <div style="color: rgba(255,255,255,0.6); font-size: 13px;">Cargando panel…</div>
+  </div>
+
+  <button class="menu-toggle" id="menuToggle"><i class="bi bi-list"></i></button>
+  <div class="overlay" id="sidebarOverlay"></div>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="logo">
+      <img src="logo-vicel.png" alt="VICEL" />
+    </div>
+    <nav class="nav">
+      <button class="nav-item active" data-tab="resumen"><i class="bi bi-house-door"></i> Resumen</button>
+      <button class="nav-item" data-tab="visitas"><i class="bi bi-clock-history"></i> Visitas</button>
+      <button class="nav-item" data-tab="paginas"><i class="bi bi-file-earmark-text"></i> Páginas</button>
+      <button class="nav-item" data-tab="ubicaciones"><i class="bi bi-geo-alt"></i> Ubicaciones</button>
+      <button class="nav-item" data-tab="dispositivos"><i class="bi bi-phone"></i> Dispositivos</button>
+      <button class="nav-item" data-tab="config"><i class="bi bi-gear"></i> Configuración</button>
+    </nav>
+    <div class="site-info">
+      <div>Sitio activo</div>
+      <strong>VICEL Finanzas</strong>
+    </div>
+  </aside>
+
+  <main class="main" id="mainContent">
+
+    <div id="tab-resumen" class="tab-content active">
+      <h1 class="page-title">Resumen</h1>
+      <p class="page-sub" id="lastUpdateLabel">—</p>
+
+      <div class="filter-bar">
+        <select id="filterRange">
+          <option value="today">Hoy</option>
+          <option value="7d" selected>Últimos 7 días</option>
+          <option value="30d">Últimos 30 días</option>
+          <option value="90d">Últimos 90 días</option>
+          <option value="all">Todo el tiempo</option>
+        </select>
+        <button class="btn-orange" onclick="reloadData()"><i class="bi bi-arrow-clockwise"></i> Actualizar</button>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi"><div class="label">Visitas</div><div class="value" id="kpiVisits">—</div><div class="sub" id="kpiVisitsSub">Páginas vistas</div></div>
+        <div class="kpi"><div class="label">Visitantes</div><div class="value" id="kpiVisitors">—</div><div class="sub">Únicos</div></div>
+        <div class="kpi"><div class="label">Sesiones</div><div class="value" id="kpiSessions">—</div><div class="sub">Grupos de visitas</div></div>
+        <div class="kpi"><div class="label">Países</div><div class="value" id="kpiCountries">—</div><div class="sub">Distintos</div></div>
+      </div>
+
+      <div class="card-dark">
+        <h3><i class="bi bi-graph-up"></i> Visitas por día</h3>
+        <div class="chart-wrap"><canvas id="chartDaily"></canvas></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card-dark">
+          <h3><i class="bi bi-pie-chart"></i> Dispositivos</h3>
+          <div class="chart-wrap"><canvas id="chartDevices"></canvas></div>
+        </div>
+        <div class="card-dark">
+          <h3><i class="bi bi-globe-americas"></i> Top países</h3>
+          <div class="chart-wrap"><canvas id="chartCountries"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-visitas" class="tab-content">
+      <h1 class="page-title">Visitas</h1>
+      <p class="page-sub">Últimas 200 visitas registradas</p>
+      <div class="filter-bar">
+        <select id="filterRange2">
+          <option value="today">Hoy</option>
+          <option value="7d" selected>Últimos 7 días</option>
+          <option value="30d">Últimos 30 días</option>
+          <option value="90d">Últimos 90 días</option>
+          <option value="all">Todo el tiempo</option>
+        </select>
+      </div>
+      <div class="row-list" id="visitsList"></div>
+    </div>
+
+    <div id="tab-paginas" class="tab-content">
+      <h1 class="page-title">Páginas</h1>
+      <p class="page-sub">Páginas más visitadas</p>
+      <div class="row-list" id="pagesList"></div>
+    </div>
+
+    <div id="tab-ubicaciones" class="tab-content">
+      <h1 class="page-title">Ubicaciones</h1>
+      <p class="page-sub">De dónde viene tu tráfico</p>
+      <div class="grid-2">
+        <div class="card-dark">
+          <h3>Países</h3>
+          <div class="row-list" id="countriesList"></div>
+        </div>
+        <div class="card-dark">
+          <h3>Ciudades</h3>
+          <div class="row-list" id="citiesList"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-dispositivos" class="tab-content">
+      <h1 class="page-title">Dispositivos</h1>
+      <p class="page-sub">Cómo te visitan</p>
+      <div class="grid-2">
+        <div class="card-dark">
+          <h3><i class="bi bi-phone"></i> Tipo de dispositivo</h3>
+          <div class="row-list" id="deviceList"></div>
+        </div>
+        <div class="card-dark">
+          <h3><i class="bi bi-browser-chrome"></i> Navegadores</h3>
+          <div class="row-list" id="browserList"></div>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="card-dark">
+          <h3><i class="bi bi-windows"></i> Sistemas operativos</h3>
+          <div class="row-list" id="osList"></div>
+        </div>
+        <div class="card-dark">
+          <h3><i class="bi bi-signpost-split"></i> Origen del tráfico</h3>
+          <div class="row-list" id="referrerList"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-config" class="tab-content">
+      <h1 class="page-title">Configuración</h1>
+      <p class="page-sub">Cómo conectar tus páginas al panel</p>
+
+      <div class="card-dark">
+        <h3><i class="bi bi-code-slash"></i> Código para tus páginas</h3>
+        <div class="info-box">
+          Copia esta línea y pégala <strong>justo antes de cerrar</strong> el <code>&lt;/body&gt;</code> de cada página web que quieras monitorear.
+        </div>
+        <div class="code-block" id="embedCode">&lt;script src="https://TU-USUARIO.github.io/vicel-analytics/analytics.js"&gt;&lt;/script&gt;</div>
+        <button class="btn-copy" onclick="copyEmbed()"><i class="bi bi-clipboard"></i> Copiar código</button>
+      </div>
+
+      <div class="card-dark">
+        <h3><i class="bi bi-info-circle"></i> Información del proyecto</h3>
+        <div class="row-list">
+          <div class="row-item"><div class="left"><span class="name">Proyecto Firebase</span></div><span class="badge">vicel-analytics</span></div>
+          <div class="row-item"><div class="left"><span class="name">Sitio identificado como</span></div><span class="badge">vicel-finanzas</span></div>
+          <div class="row-item"><div class="left"><span class="name">Colección de datos</span></div><span class="badge">visits</span></div>
+        </div>
+      </div>
+
+      <div class="card-dark">
+        <h3><i class="bi bi-shield-lock"></i> Excluir tus propias visitas</h3>
+        <div class="info-box">
+          Agrega <strong>?notrack=1</strong> al final de la URL de tu web para que <strong>esta visita no se cuente</strong>. Útil para cuando tú mismo entras a revisar.<br><br>
+          Para volver a activar el rastreo en ese dispositivo, agrega <strong>?track=1</strong>.
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // ═══════════════════════════════════════════════════════
+    // CONFIGURACIÓN DE FIREBASE
+    // ═══════════════════════════════════════════════════════
+    const firebaseConfig = {
+      apiKey: "AIzaSyBImDQlp5zYCPvbZIjKtyZnpHRb0-yB1Y",
+      authDomain: "vicel-analytics.firebaseapp.com",
+      projectId: "vicel-analytics",
+      storageBucket: "vicel-analytics.firebasestorage.app",
+      messagingSenderId: "1064010001667",
+      appId: "1:1064010001667:web:5c4cea08a46974c8e90d36"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // ═══════════════════════════════════════════════════════
+    // CONFIGURACIÓN DEL SITIO
+    // ═══════════════════════════════════════════════════════
+    const SITE_ID = 'vicel-finanzas';
+    const MAX_DOCS = 5000;
+    const COLLECTION = 'visits';
+
+    // ═══════════════════════════════════════════════════════
+    // ESTADO GLOBAL
+    // ═══════════════════════════════════════════════════════
+    let allVisits = [];
+    let charts = { daily: null, devices: null, countries: null };
+    const PALETA = ['#e2781f','#FFB347','#FFD93D','#6BCB77','#4D96FF','#845EC2','#FF6B6B','#00C9A7','#FF9671','#C34A36','#A8E6CF','#DDA0DD','#87CEEB','#F0E68C','#E6A8D7'];
+
+    // ═══════════════════════════════════════════════════════
+    // UTILIDADES
+    // ═══════════════════════════════════════════════════════
+    function escapeHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    function getRangeStart(range) {
+      const now = new Date();
+      if (range === 'today') return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      if (range === '7d') return Date.now() - 7 * 86400000;
+      if (range === '30d') return Date.now() - 30 * 86400000;
+      if (range === '90d') return Date.now() - 90 * 86400000;
+      return 0;
+    }
+    function formatRelativeDate(ts) {
+      const d = new Date(ts);
+      const today = new Date();
+      const yest = new Date(today); yest.setDate(yest.getDate() - 1);
+      const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      if (sameDay(d, today)) return 'Hoy ' + hh + ':' + mm;
+      if (sameDay(d, yest)) return 'Ayer ' + hh + ':' + mm;
+      return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }) + ' ' + hh + ':' + mm;
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // CARGA DE DATOS
+    // ═══════════════════════════════════════════════════════
+    async function loadVisits() {
+      try {
+        const snap = await db.collection(COLLECTION)
+          .orderBy('timestamp', 'desc')
+          .limit(MAX_DOCS)
+          .get();
+        allVisits = [];
+        snap.forEach(doc => {
+          const data = doc.data();
+          if (data.siteId === SITE_ID) {
+            allVisits.push({ id: doc.id, ...data });
+          }
+        });
+        document.getElementById('lastUpdateLabel').textContent =
+          'Actualizado: ' + new Date().toLocaleTimeString('es-ES') +
+          ' · ' + allVisits.length + ' registros cargados';
+      } catch (e) {
+        console.error('Error al cargar visitas:', e);
+        document.getElementById('lastUpdateLabel').textContent = '⚠️ Error al cargar datos';
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // FILTRADO
+    // ═══════════════════════════════════════════════════════
+    function filterVisits(range) {
+      const start = getRangeStart(range);
+      if (start === 0) return allVisits;
+      return allVisits.filter(v => v.timestamp >= start);
+    }
+    function unique(arr) { return Array.from(new Set(arr)); }
+
+    // ═══════════════════════════════════════════════════════
+    // RENDER: RESUMEN
+    // ═══════════════════════════════════════════════════════
+    function renderResumen() {
+      const range = document.getElementById('filterRange').value;
+      const visits = filterVisits(range);
+
+      const visitors = unique(visits.map(v => v.visitorId).filter(Boolean));
+      const sessions = unique(visits.map(v => v.sessionId).filter(Boolean));
+      const countries = unique(visits.map(v => v.country).filter(c => c && c.trim()));
+
+      document.getElementById('kpiVisits').textContent = visits.length.toLocaleString('es-ES');
+      document.getElementById('kpiVisitors').textContent = visitors.length.toLocaleString('es-ES');
+      document.getElementById('kpiSessions').textContent = sessions.length.toLocaleString('es-ES');
+      document.getElementById('kpiCountries').textContent = countries.length.toLocaleString('es-ES');
+
+      renderDailyChart(visits);
+      renderDevicesChart(visits);
+      renderCountriesChart(visits);
+    }
+
+    function renderDailyChart(visits) {
+      const map = {};
+      visits.forEach(v => {
+        const d = new Date(v.timestamp);
+        const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        map[key] = (map[key] || 0) + 1;
+      });
+      const keys = Object.keys(map).sort();
+      const labels = keys.map(k => {
+        const [y, m, d] = k.split('-');
+        return d + '/' + m;
+      });
+      const data = keys.map(k => map[k]);
+
+      if (charts.daily) charts.daily.destroy();
+      const ctx = document.getElementById('chartDaily');
+      if (keys.length === 0) {
+        charts.daily = new Chart(ctx, {
+          type: 'line',
+          data: { labels: ['Sin datos'], datasets: [{ data: [0], borderColor: '#444', backgroundColor: 'rgba(68,68,68,0.2)' }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#888' } }, y: { ticks: { color: '#888' } } } }
+        });
+        return;
+      }
+      charts.daily = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Visitas',
+            data,
+            borderColor: '#e2781f',
+            backgroundColor: 'rgba(226,120,31,0.15)',
+            borderWidth: 3,
+            tension: 0.35,
+            fill: true,
+            pointBackgroundColor: '#e2781f',
+            pointRadius: 4,
+            pointHoverRadius: 6
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#aaa', font: { family: 'Poppins', size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+            y: { beginAtZero: true, ticks: { color: '#aaa', font: { family: 'Poppins', size: 10 }, precision: 0 }, grid: { color: 'rgba(255,255,255,0.05)' } }
+          }
+        }
+      });
+    }
+
+    function renderDevicesChart(visits) {
+      const map = {};
+      visits.forEach(v => { map[v.device || 'Otro'] = (map[v.device || 'Otro'] || 0) + 1; });
+      const labels = Object.keys(map);
+      const data = Object.values(map);
+      const colors = labels.map((_, i) => PALETA[i % PALETA.length]);
+
+      if (charts.devices) charts.devices.destroy();
+      const ctx = document.getElementById('chartDevices');
+      if (labels.length === 0) {
+        charts.devices = new Chart(ctx, { type: 'doughnut', data: { labels: ['Sin datos'], datasets: [{ data: [1], backgroundColor: ['#444'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+        return;
+      }
+      charts.devices = new Chart(ctx, {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: '#2a2a2a' }] },
+        options: {
+          responsive: true, maintainAspectRatio: false, cutout: '62%',
+          plugins: { legend: { position: 'bottom', labels: { color: '#fff', font: { family: 'Poppins', size: 11, weight: '600' }, boxWidth: 12, padding: 12, usePointStyle: true, pointStyle: 'circle' } } }
+        }
+      });
+    }
+
+    function renderCountriesChart(visits) {
+      const map = {};
+      visits.forEach(v => { const k = v.country || 'Desconocido'; map[k] = (map[k] || 0) + 1; });
+      const sorted = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 7);
+      const labels = sorted.map(x => x[0]);
+      const data = sorted.map(x => x[1]);
+
+      if (charts.countries) charts.countries.destroy();
+      const ctx = document.getElementById('chartCountries');
+      if (labels.length === 0) {
+        charts.countries = new Chart(ctx, { type: 'bar', data: { labels: ['Sin datos'], datasets: [{ data: [0], backgroundColor: '#444' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+        return;
+      }
+      charts.countries = new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets: [{ data, backgroundColor: '#e2781f', borderRadius: 10, borderSkipped: false }] },
+        options: {
+          responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { beginAtZero: true, ticks: { color: '#aaa', font: { family: 'Poppins', size: 10 }, precision: 0 }, grid: { color: 'rgba(255,255,255,0.05)' } },
+            y: { ticks: { color: '#fff', font: { family: 'Poppins', size: 11, weight: '600' } }, grid: { display: false } }
+          }
+        }
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // RENDER: VISITAS
+    // ═══════════════════════════════════════════════════════
+    function renderVisitas() {
+      const range = document.getElementById('filterRange2').value;
+      const visits = filterVisits(range).slice(0, 200);
+      const container = document.getElementById('visitsList');
+      if (visits.length === 0) {
+        container.innerHTML = '<div class="empty"><i class="bi bi-inbox" style="font-size:32px; display:block; margin-bottom:8px;"></i>No hay visitas registradas todavía.<br><small>Cuando alguien entre a tu web, aparecerán aquí.</small></div>';
+        return;
+      }
+      container.innerHTML = visits.map(v => {
+        const tags = [];
+        if (v.device) tags.push(v.device);
+        if (v.browser) tags.push(v.browser);
+        if (v.os && v.os !== v.browser) tags.push(v.os);
+        if (v.country) tags.push(v.country);
+        if (v.city) tags.push(v.city);
+        const ref = v.referrer ? '<span class="tag">desde ' + escapeHtml(v.referrer) + '</span>' : '';
+        return '<div class="visit-card">' +
+          '<div class="visit-top">' +
+            '<span class="path">' + escapeHtml(v.path || '/') + '</span>' +
+            '<span class="time">' + formatRelativeDate(v.timestamp) + '</span>' +
+          '</div>' +
+          (v.title ? '<div class="title-small">' + escapeHtml(v.title) + '</div>' : '') +
+          '<div class="visit-tags">' + tags.map(t => '<span class="tag">' + escapeHtml(t) + '</span>').join('') + ref + '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // RENDER: PÁGINAS
+    // ═══════════════════════════════════════════════════════
+    function renderPaginas() {
+      const range = document.getElementById('filterRange').value;
+      const visits = filterVisits(range);
+      const map = {};
+      visits.forEach(v => {
+        const k = v.path || '/';
+        if (!map[k]) map[k] = { visits: 0, visitors: new Set() };
+        map[k].visits++;
+        if (v.visitorId) map[k].visitors.add(v.visitorId);
+      });
+      const sorted = Object.entries(map).sort((a, b) => b[1].visits - a[1].visits);
+      const container = document.getElementById('pagesList');
+      if (sorted.length === 0) { container.innerHTML = '<div class="empty">Sin datos todavía.</div>'; return; }
+      container.innerHTML = sorted.map(([path, info]) =>
+        '<div class="row-item"><div class="left"><span class="name">' + escapeHtml(path) + '</span></div>' +
+        '<div style="text-align:right;"><div class="num">' + info.visits + ' visitas</div>' +
+        '<div class="meta">' + info.visitors.size + ' visitantes únicos</div></div></div>'
+      ).join('');
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // RENDER: UBICACIONES
+    // ═══════════════════════════════════════════════════════
+    function renderUbicaciones() {
+      const range = document.getElementById('filterRange').value;
+      const visits = filterVisits(range);
+      const countryMap = {};
+      const cityMap = {};
+      visits.forEach(v => {
+        const c = v.country || 'Desconocido';
+        const city = v.city ? (v.city + ', ' + c) : null;
+        countryMap[c] = (countryMap[c] || 0) + 1;
+        if (city) cityMap[city] = (cityMap[city] || 0) + 1;
+      });
+      const renderList = (id, map) => {
+        const sorted = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 15);
+        const el = document.getElementById(id);
+        if (sorted.length === 0) { el.innerHTML = '<div class="empty">Sin datos.</div>'; return; }
+        el.innerHTML = sorted.map(([name, n]) =>
+          '<div class="row-item"><div class="left"><span class="name">' + escapeHtml(name) + '</span></div><span class="num">' + n + '</span></div>'
+        ).join('');
+      };
+      renderList('countriesList', countryMap);
+      renderList('citiesList', cityMap);
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // RENDER: DISPOSITIVOS
+    // ═══════════════════════════════════════════════════════
+    function renderDispositivos() {
+      const range = document.getElementById('filterRange').value;
+      const visits = filterVisits(range);
+      const renderList = (id, key) => {
+        const map = {};
+        visits.forEach(v => { const k = v[key] || 'Otro'; map[k] = (map[k] || 0) + 1; });
+        const sorted = Object.entries(map).sort((a, b) => b[1] - a[1]);
+        const el = document.getElementById(id);
+        if (sorted.length === 0) { el.innerHTML = '<div class="empty">Sin datos.</div>'; return; }
+        el.innerHTML = sorted.map(([name, n]) =>
+          '<div class="row-item"><div class="left"><span class="name">' + escapeHtml(name) + '</span></div><span class="num">' + n + '</span></div>'
+        ).join('');
+      };
+      renderList('deviceList', 'device');
+      renderList('browserList', 'browser');
+      renderList('osList', 'os');
+      // Referrer
+      const refMap = {};
+      visits.forEach(v => { const r = v.referrer || 'Directo'; refMap[r] = (refMap[r] || 0) + 1; });
+      const sorted = Object.entries(refMap).sort((a, b) => b[1] - a[1]);
+      const el = document.getElementById('referrerList');
+      if (sorted.length === 0) { el.innerHTML = '<div class="empty">Sin datos.</div>'; }
+      else el.innerHTML = sorted.map(([name, n]) =>
+        '<div class="row-item"><div class="left"><span class="name">' + escapeHtml(name) + '</span></div><span class="num">' + n + '</span></div>'
+      ).join('');
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // RECARGA GLOBAL
+    // ═══════════════════════════════════════════════════════
+    async function reloadData() {
+      const loadingEl = document.getElementById('loadingScreen');
+      loadingEl.classList.remove('hidden');
+      await loadVisits();
+      renderResumen();
+      renderVisitas();
+      renderPaginas();
+      renderUbicaciones();
+      renderDispositivos();
+      loadingEl.classList.add('hidden');
+    }
+    function renderAll() {
+      renderResumen();
+      renderVisitas();
+      renderPaginas();
+      renderUbicaciones();
+      renderDispositivos();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // PESTAÑAS
+    // ═══════════════════════════════════════════════════════
+    function setupTabs() {
+      document.querySelectorAll('.nav-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          const tab = btn.dataset.tab;
+          document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+          document.getElementById('tab-' + tab).classList.add('active');
+          document.getElementById('sidebar').classList.remove('open');
+          document.getElementById('sidebarOverlay').classList.remove('active');
+          // redibujar charts al volver al resumen
+          if (tab === 'resumen') setTimeout(() => renderResumen(), 50);
+        });
+      });
+      document.getElementById('menuToggle').addEventListener('click', () => {
+        document.getElementById('sidebar').classList.toggle('open');
+        document.getElementById('sidebarOverlay').classList.toggle('active');
+      });
+      document.getElementById('sidebarOverlay').addEventListener('click', () => {
+        document.getElementById('sidebar').classList.remove('open');
+        document.getElementById('sidebarOverlay').classList.remove('active');
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // COPIAR CÓDIGO DE EMBED
+    // ═══════════════════════════════════════════════════════
+    function copyEmbed() {
+      const code = document.getElementById('embedCode').textContent;
+      navigator.clipboard.writeText(code).then(() => {
+        const btn = event.target.closest('button');
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check-lg"></i> ¡Copiado!';
+        setTimeout(() => { btn.innerHTML = orig; }, 1800);
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // INICIALIZACIÓN
+    // ═══════════════════════════════════════════════════════
+    document.addEventListener('DOMContentLoaded', async () => {
+      setupTabs();
+
+      document.getElementById('filterRange').addEventListener('change', () => {
+        renderResumen(); renderPaginas(); renderUbicaciones(); renderDispositivos();
+      });
+      document.getElementById('filterRange2').addEventListener('change', renderVisitas);
+
+      await reloadData();
+
+      // Refresco automático cada 60 segundos
+      setInterval(async () => {
+        await loadVisits();
+        renderAll();
+      }, 60000);
+    });
+
+    // ─── Registrar Service Worker ───
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./service-worker.js')
+          .then(r => console.log('✅ SW registrado:', r.scope))
+          .catch(e => console.warn('⚠️ SW error:', e));
+      });
+    }
+  </script>
+</body>
+</html>
