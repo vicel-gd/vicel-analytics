@@ -1,5 +1,5 @@
 /* ============================================================
-   VICEL Analytics — Tracker
+   VICEL Analytics — Tracker v2 (con filtro de bots)
    Envía cada visita a Firestore sin instalar nada.
    Uso: <script src="analytics.js"></script> antes de </body>
    ============================================================ */
@@ -29,6 +29,37 @@
     }
     if (localStorage.getItem('_vicel_no_track') === '1') return;
   } catch (e) { /* modo incógnito, seguimos */ }
+
+  // ═══════════════════════════════════════════════════════════
+  // FILTRO DE BOTS — Detiene el envío si es un robot
+  // ═══════════════════════════════════════════════════════════
+  function isBot() {
+    var ua = navigator.userAgent || '';
+
+    // 1) User-agent vacío o demasiado corto (navegadores reales siempre tienen uno largo)
+    if (!ua || ua.length < 20) return true;
+
+    // 2) Patrones comunes de bots, crawlers, frameworks de automatización
+    var botPattern = /bot|crawler|spider|crawl|scrapy|facebookexternalhit|whatsapp|telegram|slack|discord|skype|linkedin|twitterbot|pinterest|embedly|preview|quora|outbrain|redditbot|headless|phantom|selenium|puppeteer|playwright|puppet|python|curl|wget|axios|node-fetch|okhttp|go-http|java\/|libwww|urlscan|urlchecker|semrush|ahrefs|mj12|dotbot|petalbot|yandexbot|applebot|bingbot|duckduckbot|baiduspider|sogou|exabot|ia_archiver|archive\.org|wayback|uptime|pingdom|statuscake|monitor|checker|lighthouse|pagespeed|gtmetrix|test|nutch|heritrix|expanse|screaming|seznam|megaindex|ltx71|netsystems|zgrab|masscan|nmap/i;
+    if (botPattern.test(ua)) return true;
+
+    // 3) Automatización (Selenium, Puppeteer, Playwright)
+    if (navigator.webdriver === true) return true;
+
+    // 4) Navegadores reales SIEMPRE tienen idiomas configurados
+    if (!navigator.languages || navigator.languages.length === 0) return true;
+
+    // 5) Headless Chrome se identifica en algunos casos
+    if (/HeadlessChrome/i.test(ua)) return true;
+
+    // 6) Dimensiones de pantalla sospechosas (headless suele reportar 0)
+    if (!screen.width || !screen.height || screen.width === 0 || screen.height === 0) return true;
+
+    return false;
+  }
+
+  // Si es bot, nos detenemos silenciosamente (no enviamos nada).
+  if (isBot()) return;
 
   // --- IDs persistentes ---
   var visitorId;
